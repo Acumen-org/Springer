@@ -1,0 +1,29 @@
+
+@import url(http://fonts.googleapis.com/css?family=Roboto:400,900,500);
+
+body {
+    font-size: 24px;
+    
+    font-family: 'Roboto', 'sans-serif';
+    -webkit-font-smoothing: antialiased;
+    background: #fff;
+} 
+
+
+.thanks {
+    margin: auto;
+    width : 75%;
+    text-align: left;
+    color: #26B54D;
+    font-weight: bold;
+}
+
+.thanks a{
+    color: #BBB;
+    font-weight: light;
+}
+
+.thanks a:hover{
+    color: #000;
+    font-weight: bold;
+}

@@ -1,0 +1,5 @@
+User-Agent: *
+Allow: /
+Disallow: /thankyou
+
+Sitemap: https://springer.capital/sitemap.xml
