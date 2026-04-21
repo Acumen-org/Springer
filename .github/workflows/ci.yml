@@ -68,14 +68,14 @@ jobs:
 
       - name: Update Nomad job image tag
         run: |
-          sed -i "s|IMAGE_TAG_PLACEHOLDER|${IMAGE_TAG}|g" nomad/cwmu.hcl
+          sed -i "s|IMAGE_TAG_PLACEHOLDER|${IMAGE_TAG}|g" nomad/springer.hcl
 
       - name: Deploy to Nomad
         env:
           NOMAD_ADDR: ${{ vars.NOMAD_ADDR }}
           NOMAD_TOKEN: ${{ secrets.NOMAD_TOKEN }}
         run: |
-          nomad job run nomad/cwmu.hcl
+          nomad job run nomad/springer.hcl
 
   # notify:
   #   runs-on: self-hosted
