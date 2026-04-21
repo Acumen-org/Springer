@@ -1,79 +1,54 @@
-# Dockerfile for HashiCorp Nomad
-# Multi-stage build for production-ready Nomad image
+# syntax=docker/dockerfile:1
 
-# Build stage - download and verify Nomad
-FROM alpine:latest AS builder
+# Stage 1: Dependencies
+FROM node:20-alpine AS deps
+WORKDIR /app
 
-# Set Nomad version
-ARG NOMAD_VERSION=1.7.6
+# Install dependencies needed for node-gyp
+RUN apk add --no-cache libc6-compat
+
+# Copy package files
+COPY package.json package-lock.json* ./
 
 # Install dependencies
-RUN apk add --no-cache \
-    curl \
-    unzip \
-    gnupg
+RUN npm ci
 
-# Download and verify Nomad
-WORKDIR /tmp
-RUN curl -LO https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip \
-    && curl -LO https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_SHA256SUMS \
-    && curl -LO https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_SHA256SUMS.sig
+# Stage 2: Builder
+FROM node:20-alpine AS builder
+WORKDIR /app
 
-# Verify signature and checksum
-RUN gpg --keyserver keyserver.ubuntu.com --recv-keys C874011F0AB405110D02105534365D9472D7468F \
-    && gpg --verify nomad_${NOMAD_VERSION}_SHA256SUMS.sig nomad_${NOMAD_VERSION}_SHA256SUMS \
-    && grep nomad_${NOMAD_VERSION}_linux_amd64.zip nomad_${NOMAD_VERSION}_SHA256SUMS | sha256sum -c
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
-# Unzip Nomad
-RUN unzip nomad_${NOMAD_VERSION}_linux_amd64.zip \
-    && chmod +x nomad
+# Build the application
+RUN npm run build
 
-# Runtime stage
-FROM alpine:latest
+# Stage 3: Runner
+FROM node:20-alpine AS runner
+WORKDIR /app
 
-# Install runtime dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    dumb-init \
-    iptables \
-    ip6tables \
-    su-exec
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create nomad user
-RUN addgroup -S nomad && adduser -S -G nomad nomad
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Copy Nomad binary from builder
-COPY --from=builder /tmp/nomad /bin/nomad
+# Copy public assets
+COPY --from=builder /app/public ./public
 
-# Create necessary directories
-RUN mkdir -p /nomad/data /nomad/config \
-    && chown -R nomad:nomad /nomad
+# Set correct permissions for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
 
-# Set environment variables
-ENV NOMAD_DATA_DIR=/nomad/data
-ENV NOMAD_CONFIG_DIR=/nomad/config
+# Copy standalone build
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Expose Nomad ports
-# HTTP API - 4646
-# RPC - 4647
-# Serf WAN - 4648
-EXPOSE 4646 4647 4648 4648/udp
+USER nextjs
 
-# Volume for persistent data
-VOLUME ["/nomad/data", "/nomad/config"]
+EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD nomad status || exit 1
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-# Use dumb-init for proper signal handling
-ENTRYPOINT ["dumb-init", "--"]
-
-# Default command runs nomad as nomad user
-CMD ["su-exec", "nomad", "nomad", "agent", "-config", "/nomad/config"]
-
-# Labels
-LABEL maintainer="Acumen-org" \
-      vendor="HashiCorp" \
-      product="Nomad" \
-      version="${NOMAD_VERSION}"
+CMD ["node", "server.js"]
